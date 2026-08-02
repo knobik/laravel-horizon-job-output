@@ -1,0 +1,92 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    # A live Redis is not optional here. The Redis-backed tests skip themselves
+    # when no server is reachable, so without this service the suite would go
+    # green while never running the guard that keeps output from leaking
+    # TTL-less keys. --fail-on-skipped below turns that silence into a failure.
+    services:
+      redis:
+        image: redis:alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Testbench 11 requires PHP 8.3+, so the PHP 8.2 floor is only
+          # reachable through the Laravel 12 line.
+          - { php: '8.2', laravel: 12, testbench: '^10.0', dependencies: lowest }
+          - { php: '8.2', laravel: 12, testbench: '^10.0', dependencies: highest }
+          - { php: '8.3', laravel: 12, testbench: '^10.0', dependencies: highest }
+          - { php: '8.3', laravel: 13, testbench: '^11.0', dependencies: highest }
+          - { php: '8.4', laravel: 13, testbench: '^11.0', dependencies: highest }
+
+    name: PHP ${{ matrix.php }} · Laravel ${{ matrix.laravel }} · ${{ matrix.dependencies }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: redis
+          coverage: none
+
+      - name: Install dependencies
+        run: |
+          composer require --no-update --dev "orchestra/testbench:${{ matrix.testbench }}"
+          composer require --no-update "illuminate/support:^${{ matrix.laravel }}.0" "illuminate/contracts:^${{ matrix.laravel }}.0"
+          composer update --no-interaction --prefer-dist \
+            ${{ matrix.dependencies == 'lowest' && '--prefer-lowest --prefer-stable' || '' }}
+
+      - name: Run tests
+        # --fail-on-skipped: a skipped Redis test means the service never came
+        # up, which must fail rather than pass quietly.
+        run: vendor/bin/phpunit --fail-on-skipped
+        env:
+          REDIS_HOST: 127.0.0.1
+          REDIS_PORT: 6379
+
+  lint:
+    runs-on: ubuntu-latest
+    name: lint
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+
+      - name: Install dependencies
+        run: composer update --no-interaction --prefer-dist
+
+      - name: Check code style
+        run: vendor/bin/pint --test
+
+      - name: Check panel script parses
+        # This file is inlined into Horizon's layout, so a syntax error here
+        # does not degrade the panel — it breaks the whole dashboard.
+        run: node --check resources/js/job-output.js

@@ -8,9 +8,7 @@ namespace Knobik\HorizonJobOutput\Tests\Fixtures;
  */
 class FakeQueueJob
 {
-    public function __construct(protected ?string $uuid = 'job-uuid')
-    {
-    }
+    public function __construct(protected ?string $uuid = 'job-uuid') {}
 
     public function uuid(): ?string
     {

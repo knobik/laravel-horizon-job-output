@@ -22,7 +22,7 @@ class CaptureJobOutputTest extends TestCase
     {
         parent::setUp();
 
-        $this->store = new RecordingStore();
+        $this->store = new RecordingStore;
         $this->app->instance(JobOutputStore::class, $this->store);
     }
 
@@ -43,7 +43,7 @@ class CaptureJobOutputTest extends TestCase
     #[Test]
     public function it_captures_output_from_a_job_using_the_trait(): void
     {
-        $this->runJob(new JobWithOutput());
+        $this->runJob(new JobWithOutput);
 
         $this->assertStringContainsString('working', $this->store->latest());
         $this->assertSame('job-uuid', $this->store->writes[0][0]);
@@ -57,7 +57,7 @@ class CaptureJobOutputTest extends TestCase
     public function it_keeps_the_output_of_a_job_that_threw(): void
     {
         try {
-            $this->runJob(new JobThatFails());
+            $this->runJob(new JobThatFails);
             $this->fail('The exception should not have been swallowed.');
         } catch (RuntimeException $e) {
             $this->assertSame('deliberate failure', $e->getMessage());
@@ -69,13 +69,13 @@ class CaptureJobOutputTest extends TestCase
     #[Test]
     public function it_returns_whatever_the_job_returned(): void
     {
-        $this->assertSame('done', $this->runJob(new JobWithOutput()));
+        $this->assertSame('done', $this->runJob(new JobWithOutput));
     }
 
     #[Test]
     public function it_ignores_jobs_that_do_not_use_the_trait(): void
     {
-        $this->runJob(new JobWithoutTrait());
+        $this->runJob(new JobWithoutTrait);
 
         $this->assertSame(0, $this->store->writeCount());
     }
@@ -83,7 +83,7 @@ class CaptureJobOutputTest extends TestCase
     #[Test]
     public function it_respects_a_job_opting_out(): void
     {
-        $this->runJob(new JobOptingOut());
+        $this->runJob(new JobOptingOut);
 
         $this->assertSame(0, $this->store->writeCount());
     }
@@ -105,7 +105,7 @@ class CaptureJobOutputTest extends TestCase
     {
         config(['horizon-job-output.enabled' => false]);
 
-        $this->runJob(new JobWithOutput());
+        $this->runJob(new JobWithOutput);
 
         $this->assertSame(0, $this->store->writeCount());
     }
@@ -120,7 +120,7 @@ class CaptureJobOutputTest extends TestCase
     {
         config(['horizon-job-output.enabled' => false]);
 
-        $this->assertSame('done', $this->runJob(new JobWithOutput()));
+        $this->assertSame('done', $this->runJob(new JobWithOutput));
     }
 
     #[Test]
@@ -132,7 +132,7 @@ class CaptureJobOutputTest extends TestCase
     #[Test]
     public function a_job_that_opted_out_still_runs(): void
     {
-        $this->assertSame('done', $this->runJob(new JobOptingOut()));
+        $this->assertSame('done', $this->runJob(new JobOptingOut));
     }
 
     #[Test]
@@ -140,7 +140,7 @@ class CaptureJobOutputTest extends TestCase
     {
         config(['horizon-job-output.max_bytes' => 40]);
 
-        $job = new class(new FakeQueueJob()) extends JobWithOutput
+        $job = new class(new FakeQueueJob) extends JobWithOutput
         {
             public function handle(): void
             {

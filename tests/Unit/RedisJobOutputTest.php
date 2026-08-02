@@ -22,7 +22,7 @@ class RedisJobOutputTest extends TestCase
     #[Test]
     public function it_accumulates_written_lines(): void
     {
-        $output = $this->makeOutput($store = new RecordingStore());
+        $output = $this->makeOutput($store = new RecordingStore);
 
         $output->writeln('first');
         $output->writeln('second');
@@ -38,7 +38,7 @@ class RedisJobOutputTest extends TestCase
     #[Test]
     public function it_batches_writes_within_the_flush_interval(): void
     {
-        $output = $this->makeOutput($store = new RecordingStore(), flushMs: 60_000);
+        $output = $this->makeOutput($store = new RecordingStore, flushMs: 60_000);
 
         for ($i = 0; $i < 50; $i++) {
             $output->writeln("line {$i}");
@@ -54,7 +54,7 @@ class RedisJobOutputTest extends TestCase
     #[Test]
     public function it_flushes_once_the_interval_has_elapsed(): void
     {
-        $output = $this->makeOutput($store = new RecordingStore(), flushMs: 0);
+        $output = $this->makeOutput($store = new RecordingStore, flushMs: 0);
 
         $output->writeln('immediate');
 
@@ -64,7 +64,7 @@ class RedisJobOutputTest extends TestCase
     #[Test]
     public function it_does_not_write_again_when_nothing_changed(): void
     {
-        $output = $this->makeOutput($store = new RecordingStore(), flushMs: 60_000);
+        $output = $this->makeOutput($store = new RecordingStore, flushMs: 60_000);
 
         $output->writeln('only line');
         $output->flush(force: true);
@@ -81,7 +81,7 @@ class RedisJobOutputTest extends TestCase
     #[Test]
     public function it_truncates_output_at_the_configured_limit(): void
     {
-        $output = $this->makeOutput($store = new RecordingStore(), maxBytes: 200, flushMs: 60_000);
+        $output = $this->makeOutput($store = new RecordingStore, maxBytes: 200, flushMs: 60_000);
 
         for ($i = 0; $i < 500; $i++) {
             $output->writeln(str_repeat('x', 40));
@@ -98,7 +98,7 @@ class RedisJobOutputTest extends TestCase
     #[Test]
     public function it_stops_appending_after_truncation(): void
     {
-        $output = $this->makeOutput($store = new RecordingStore(), maxBytes: 50, flushMs: 60_000);
+        $output = $this->makeOutput($store = new RecordingStore, maxBytes: 50, flushMs: 60_000);
 
         $output->writeln(str_repeat('x', 100));
         $output->flush(force: true);
@@ -114,7 +114,7 @@ class RedisJobOutputTest extends TestCase
     #[Test]
     public function it_writes_to_the_job_it_was_built_for(): void
     {
-        $output = $this->makeOutput($store = new RecordingStore());
+        $output = $this->makeOutput($store = new RecordingStore);
 
         $output->writeln('hello');
         $output->flush(force: true);

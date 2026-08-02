@@ -15,8 +15,8 @@ class WritesJobOutputTest extends TestCase
 {
     protected function job(): array
     {
-        $job = new JobWithOutput();
-        $job->setOutput(new OutputStyle(new ArrayInput([]), $buffer = new BufferedOutput()));
+        $job = new JobWithOutput;
+        $job->setOutput(new OutputStyle(new ArrayInput([]), $buffer = new BufferedOutput));
 
         return [$job, $buffer];
     }

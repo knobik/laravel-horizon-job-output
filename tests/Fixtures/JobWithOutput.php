@@ -12,7 +12,7 @@ class JobWithOutput
 
     public function __construct(?object $job = null)
     {
-        $this->job = $job ?? new FakeQueueJob();
+        $this->job = $job ?? new FakeQueueJob;
     }
 
     public function handle(): void

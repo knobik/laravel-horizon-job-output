@@ -24,8 +24,7 @@ class CaptureJobOutput
     public function __construct(
         protected JobOutputStore $store,
         protected Config $config,
-    ) {
-    }
+    ) {}
 
     public function handle($command, Closure $next)
     {
@@ -40,7 +39,7 @@ class CaptureJobOutput
             // The job still needs somewhere to write. Without this, disabling
             // the package or dispatching synchronously would make every
             // $this->info() call inside the job fatal on a null output.
-            $command->setOutput(new OutputStyle(new ArrayInput([]), new NullOutput()));
+            $command->setOutput(new OutputStyle(new ArrayInput([]), new NullOutput));
 
             return $next($command);
         }

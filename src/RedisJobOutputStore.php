@@ -6,9 +6,7 @@ use Illuminate\Contracts\Redis\Factory as RedisFactory;
 
 class RedisJobOutputStore implements JobOutputStore
 {
-    public function __construct(protected RedisFactory $redis)
-    {
-    }
+    public function __construct(protected RedisFactory $redis) {}
 
     /**
      * Store the output for the given job.

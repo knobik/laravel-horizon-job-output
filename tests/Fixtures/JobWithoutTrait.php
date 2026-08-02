@@ -8,7 +8,7 @@ class JobWithoutTrait
 
     public function __construct()
     {
-        $this->job = new FakeQueueJob();
+        $this->job = new FakeQueueJob;
     }
 
     public function handle(): void

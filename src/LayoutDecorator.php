@@ -33,9 +33,7 @@ class LayoutDecorator
 
     protected const EXPORT_PATTERN = '/export\s*\{\s*(\w+)\s+as\s+Terminal\s*\}\s*;?/';
 
-    public function __construct(protected Config $config)
-    {
-    }
+    public function __construct(protected Config $config) {}
 
     public function decorate(string $html): string
     {
