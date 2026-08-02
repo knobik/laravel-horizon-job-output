@@ -90,17 +90,33 @@ exactly as it would in a shell. It adds roughly 345KB to each dashboard page.
 rewrite the current line are collapsed, so a progress bar shows only its final
 state. This is also the automatic fallback if the vendored build is unavailable.
 
-## Testing jobs that write output
+## Running jobs outside Horizon
 
-The output instance is attached when a job runs on a queue. Calling `handle()`
-directly in a test bypasses that, so set an output first:
+Writing output is never a reason for a job to fail. Whatever path a job takes,
+the write helpers work:
+
+| How the job runs | Output |
+| --- | --- |
+| Queued, processed by Horizon | captured and shown on the dashboard |
+| Queued, processed by `queue:work` | captured — Horizon records the job when it is pushed, not when it runs |
+| `dispatchSync()` / `dispatch_sync()` | discarded; there is no Horizon record to attach it to |
+| `(new Job)->handle()` directly | discarded |
+| Package disabled | discarded |
+
+To assert on output in a test, attach one and read it back:
 
 ```php
 $job = new RebuildSearchIndex();
-$job->setOutput(new OutputStyle(new ArrayInput([]), new BufferedOutput()));
+$job->setOutput(new OutputStyle(new ArrayInput([]), $buffer = new BufferedOutput()));
 
 $job->handle();
+
+$this->assertStringContainsString('Index rebuilt', $buffer->fetch());
 ```
+
+The interactive prompts are the one deliberate exception: `ask()`, `confirm()`
+and friends throw rather than returning something meaningless, because a worker
+has no input stream and they would otherwise block until the job timed out.
 
 ## Requirements
 

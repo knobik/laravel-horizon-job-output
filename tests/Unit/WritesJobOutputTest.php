@@ -67,6 +67,38 @@ class WritesJobOutputTest extends TestCase
         $this->assertStringContainsString('| 1', $output);
     }
 
+    /**
+     * Nothing attaches an output when a job is constructed and invoked by hand,
+     * so every write path has to cope with there being none. Printing must never
+     * be the reason a job fails.
+     */
+    #[Test]
+    public function it_writes_nowhere_rather_than_failing_when_no_output_was_attached(): void
+    {
+        $job = new JobWithOutput;
+
+        $job->info('an informational line');
+        $job->line('a plain line');
+        $job->comment('a comment');
+        $job->error('a problem');
+        $job->warn('a warning');
+        $job->newLine(2);
+        $job->table(['id'], [[1]]);
+        $job->withProgressBar([1, 2, 3], fn () => null);
+
+        $this->assertTrue(true, 'None of the write helpers may throw without an output.');
+    }
+
+    #[Test]
+    public function a_job_run_directly_completes_without_an_output(): void
+    {
+        $job = new JobWithOutput;
+
+        $job->handle();
+
+        $this->assertInstanceOf(OutputStyle::class, $job->getOutput());
+    }
+
     #[Test]
     public function it_captures_output_by_default(): void
     {
