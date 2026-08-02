@@ -11,6 +11,11 @@
         "console"
     ],
     "license": "MIT",
+    "homepage": "https://github.com/knobik/laravel-horizon-job-output",
+    "support": {
+        "issues": "https://github.com/knobik/laravel-horizon-job-output/issues",
+        "source": "https://github.com/knobik/laravel-horizon-job-output"
+    },
     "authors": [
         {
             "name": "knobik",
