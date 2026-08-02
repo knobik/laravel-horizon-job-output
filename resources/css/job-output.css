@@ -1,0 +1,85 @@
+/*
+ * The panel is always dark, in both page themes, so it reads as a console. The
+ * background matches the code-bg colour Horizon uses for the payload card that
+ * sits directly above it.
+ *
+ * The terminal renders at a fixed column count matching the width the job wrote
+ * at, so a narrow viewport scrolls rather than reflowing and breaking a progress
+ * bar that redraws itself in place.
+ */
+#hjo-root .hjo-body {
+    padding: 0.75rem 1rem;
+    overflow-x: auto;
+    background-color: #292d3e;
+}
+
+/* The terminal sizes itself to its content; see fitRows(). */
+#hjo-root .xterm .xterm-viewport {
+    overflow-y: auto;
+}
+
+/*
+ * Grayscale antialiasing keeps the shade characters a progress bar is drawn
+ * from looking even. Subpixel antialiasing renders those dense dither patterns
+ * differently from one platform to the next.
+ */
+#hjo-root .xterm .xterm-rows {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+/*
+ * Everything below styles the fallback renderer, used when the terminal build
+ * is unavailable or the html renderer is configured.
+ */
+#hjo-root .hjo-output {
+    margin: 0;
+    max-height: 28rem;
+    overflow: auto;
+    color: #d7dae0;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 0.8125rem;
+    line-height: 1.5;
+    white-space: pre;
+    tab-size: 4;
+}
+
+#hjo-root .hjo-status {
+    font-size: 0.75rem;
+    opacity: 0.65;
+}
+
+#hjo-root .hjo-bold {
+    font-weight: 600;
+}
+
+#hjo-root .hjo-underline {
+    text-decoration: underline;
+}
+
+#hjo-root .hjo-fg-black { color: #3b4048; }
+#hjo-root .hjo-fg-red { color: #e06c75; }
+#hjo-root .hjo-fg-green { color: #98c379; }
+#hjo-root .hjo-fg-yellow { color: #e5c07b; }
+#hjo-root .hjo-fg-blue { color: #61afef; }
+#hjo-root .hjo-fg-magenta { color: #c678dd; }
+#hjo-root .hjo-fg-cyan { color: #56b6c2; }
+#hjo-root .hjo-fg-white { color: #d7dae0; }
+
+#hjo-root .hjo-fg-bright-black { color: #6b727d; }
+#hjo-root .hjo-fg-bright-red { color: #f08d94; }
+#hjo-root .hjo-fg-bright-green { color: #b3dd9a; }
+#hjo-root .hjo-fg-bright-yellow { color: #f0d399; }
+#hjo-root .hjo-fg-bright-blue { color: #8bc6f5; }
+#hjo-root .hjo-fg-bright-magenta { color: #d79bea; }
+#hjo-root .hjo-fg-bright-cyan { color: #7cccd6; }
+#hjo-root .hjo-fg-bright-white { color: #ffffff; }
+
+#hjo-root .hjo-bg-black { background-color: #3b4048; color: #d7dae0; }
+#hjo-root .hjo-bg-red { background-color: #e06c75; color: #292d3e; }
+#hjo-root .hjo-bg-green { background-color: #98c379; color: #292d3e; }
+#hjo-root .hjo-bg-yellow { background-color: #e5c07b; color: #292d3e; }
+#hjo-root .hjo-bg-blue { background-color: #61afef; color: #292d3e; }
+#hjo-root .hjo-bg-magenta { background-color: #c678dd; color: #292d3e; }
+#hjo-root .hjo-bg-cyan { background-color: #56b6c2; color: #292d3e; }
+#hjo-root .hjo-bg-white { background-color: #d7dae0; color: #292d3e; }
