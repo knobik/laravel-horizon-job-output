@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 use Knobik\HorizonJobOutput\Pipes\CaptureJobOutput;
 use Laravel\Horizon\Contracts\JobRepository;
+use Laravel\Sentinel\Http\Middleware\SentinelMiddleware;
 use ReflectionProperty;
 use Throwable;
 
@@ -67,10 +68,8 @@ class HorizonJobOutputServiceProvider extends ServiceProvider
      * Register the reserved jobs endpoint inside Horizon's route group.
      *
      * The group is rebuilt here rather than reused because Horizon has not
-     * booted yet — see the note at the call site. Only the middleware group name
-     * is referenced, and middleware groups resolve per request, so the group
-     * Horizon defines later is still the one that runs. horizon.path is read
-     * with a fallback for the same reason: a customised path always comes from a
+     * booted yet — see the note at the call site. horizon.path is read with a
+     * fallback for the same reason: a customised path always comes from a
      * published config file, which is loaded before any provider runs, so the
      * fallback only ever covers Horizon's own default.
      */
@@ -87,10 +86,35 @@ class HorizonJobOutputServiceProvider extends ServiceProvider
         Route::group([
             'domain' => config('horizon.domain', null),
             'prefix' => config('horizon.path', 'horizon'),
-            'middleware' => 'horizon',
+            'middleware' => $this->middleware(),
         ], function () {
             $this->loadRoutesFrom(__DIR__.'/../routes/reserved-jobs.php');
         });
+    }
+
+    /**
+     * Build the same middleware stack Horizon puts on its own dashboard routes.
+     *
+     * Newer Horizon collects this into a middleware group named "horizon", but
+     * that group does not exist across the whole ^5.0 range this package
+     * supports, and naming one that was never registered makes the router look
+     * for a class by that name. Its contents are rebuilt instead.
+     *
+     * The Sentinel check is part of it: it authorises the request, so leaving it
+     * out where Horizon applies it would make this endpoint laxer than the
+     * dashboard around it. Horizon requires laravel/sentinel from the release
+     * that introduced the group, so the class being present is the same question
+     * as whether the installed Horizon uses it.
+     */
+    protected function middleware(): array
+    {
+        $middleware = (array) config('horizon.middleware', ['web']);
+
+        if (class_exists(SentinelMiddleware::class)) {
+            array_unshift($middleware, SentinelMiddleware::class.':horizon');
+        }
+
+        return $middleware;
     }
 
     /**
