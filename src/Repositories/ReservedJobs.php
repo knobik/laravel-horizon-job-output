@@ -9,6 +9,7 @@ use Illuminate\Queue\RedisQueue;
 use Illuminate\Redis\Connections\Connection;
 use Illuminate\Redis\Connections\PhpRedisClusterConnection;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Log;
 use Knobik\HorizonJobOutput\JobOutputStore;
 use Laravel\Horizon\Contracts\SupervisorRepository;
 use ReflectionMethod;
@@ -69,20 +70,15 @@ class ReservedJobs
      */
     protected function reservedOn(string $connection, array $queues, float $now): Collection
     {
+        $redisQueue = $this->queue->connection($connection);
+
+        if (! $redisQueue instanceof RedisQueue) {
+            return collect();
+        }
+
+        $keys = array_map(fn (string $queue) => $this->reservedKey($redisQueue, $queue), $queues);
+
         try {
-            $redisQueue = $this->queue->connection($connection);
-
-            if (! $redisQueue instanceof RedisQueue) {
-                return collect();
-            }
-
-            // getQueueRedisKey() is protected but applies the cluster hash-tag
-            // handling that a hand-built key would get wrong, so it is borrowed
-            // rather than reimplemented.
-            $key = new ReflectionMethod($redisQueue, 'getQueueRedisKey');
-
-            $keys = array_map(fn (string $queue) => $key->invoke($redisQueue, $queue).':reserved', $queues);
-
             $sets = $this->pipeline($redisQueue->getConnection(), function ($pipe) use ($keys) {
                 foreach ($keys as $key) {
                     // Both phpredis and Predis return the set as member => score
@@ -90,15 +86,41 @@ class ReservedJobs
                     $pipe->zrange($key, 0, -1, ['withscores' => true]);
                 }
             });
-        } catch (Throwable) {
+        } catch (Throwable $e) {
             // A connection that is misconfigured or unreachable should leave the
-            // page listing the queues that do work, not fail outright.
+            // page listing the queues that do work, not fail outright. It should
+            // not do so silently, though: an empty page and a broken connection
+            // look identical from the dashboard.
+            Log::warning(
+                "[horizon-job-output] Could not read the reserved jobs on the '{$connection}' queue connection: ".
+                $e->getMessage()
+            );
+
             return collect();
         }
 
         return collect($sets)->flatMap(fn ($set, int $index) => collect($set)->map(
             fn ($expiresAt, $payload) => $this->parse($payload, (float) $expiresAt, $connection, $queues[$index], $now)
         ))->filter()->values();
+    }
+
+    /**
+     * Build the key of one queue's reserved set.
+     *
+     * Laravel 13 moved the key building behind a protected getQueueRedisKey()
+     * that wraps the queue in a hash tag on cluster connections; on Laravel 12,
+     * which this package still supports, the public getQueue() is the whole of
+     * it. Chosen by feature detection rather than by catching the failure —
+     * reaching for a method that is not there would otherwise surface as a queue
+     * with no reserved jobs, which is indistinguishable from a quiet queue.
+     */
+    protected function reservedKey(RedisQueue $queue, string $name): string
+    {
+        $key = method_exists($queue, 'getQueueRedisKey')
+            ? (new ReflectionMethod($queue, 'getQueueRedisKey'))->invoke($queue, $name)
+            : $queue->getQueue($name);
+
+        return $key.':reserved';
     }
 
     /**
