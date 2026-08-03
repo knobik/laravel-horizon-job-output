@@ -45,6 +45,19 @@ trait WritesJobOutput
     }
 
     /**
+     * The level this job writes at, named as Artisan's flags: "quiet",
+     * "normal", "v", "vv" or "vvv".
+     *
+     * Null defers to the horizon-job-output.verbosity setting. Override to
+     * raise it for one job — the long job whose progress is worth timing is
+     * rarely every job in the application.
+     */
+    public function outputVerbosity(): ?string
+    {
+        return null;
+    }
+
+    /**
      * Make sure there is somewhere to write.
      *
      * A job that prints must not depend on how it was started. Nothing attaches

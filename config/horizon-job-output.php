@@ -81,6 +81,27 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Verbosity
+    |--------------------------------------------------------------------------
+    |
+    | The level jobs write at, named as Artisan's flags: "quiet", "normal", "v",
+    | "vv" or "vvv". It decides which of the write helpers' optional verbosity
+    | arguments are honoured — $this->info('detail', 'vv') is discarded below
+    | that level — and how much a progress bar reports, exactly as it does for a
+    | command: "v" adds the elapsed time, "vv" the estimate, "vvv" the memory.
+    |
+    | A single job can override this by implementing outputVerbosity(), which is
+    | usually the better place for it: the long job whose progress is worth
+    | timing is rarely every job in the application.
+    |
+    | Note that "quiet" suppresses everything, progress bars included.
+    |
+    */
+
+    'verbosity' => env('HORIZON_JOB_OUTPUT_VERBOSITY', 'normal'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Renderer
     |--------------------------------------------------------------------------
     |

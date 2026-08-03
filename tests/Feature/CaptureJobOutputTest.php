@@ -2,6 +2,7 @@
 
 namespace Knobik\HorizonJobOutput\Tests\Feature;
 
+use Illuminate\Support\Facades\Log;
 use Knobik\HorizonJobOutput\JobOutputStore;
 use Knobik\HorizonJobOutput\Pipes\CaptureJobOutput;
 use Knobik\HorizonJobOutput\Tests\Fixtures\FakeQueueJob;
@@ -154,5 +155,145 @@ class CaptureJobOutputTest extends TestCase
 
         $this->assertStringContainsString('output truncated', $this->store->latest());
         $this->assertLessThan(150, strlen($this->store->latest()));
+    }
+
+    /**
+     * A job that writes at three levels, so that each test can say which of
+     * them should have survived.
+     */
+    protected function chattyJob(?string $verbosity = null): object
+    {
+        return new class(new FakeQueueJob, $verbosity) extends JobWithOutput
+        {
+            // Not $verbosity: InteractsWithIO already declares one.
+            public function __construct(object $job, protected ?string $level)
+            {
+                parent::__construct($job);
+            }
+
+            public function outputVerbosity(): ?string
+            {
+                return $this->level;
+            }
+
+            public function handle(): void
+            {
+                $this->info('always');
+                $this->info('detail', 'vv');
+                $this->info('debugging', 'vvv');
+            }
+        };
+    }
+
+    #[Test]
+    public function it_writes_at_the_normal_level_by_default(): void
+    {
+        $this->runJob($this->chattyJob());
+
+        $this->assertStringContainsString('always', $this->store->latest());
+        $this->assertStringNotContainsString('detail', $this->store->latest());
+    }
+
+    #[Test]
+    public function it_honours_the_configured_verbosity(): void
+    {
+        config(['horizon-job-output.verbosity' => 'vv']);
+
+        $this->runJob($this->chattyJob());
+
+        $this->assertStringContainsString('detail', $this->store->latest());
+        $this->assertStringNotContainsString('debugging', $this->store->latest());
+    }
+
+    /**
+     * Artisan treats any number of v's past three as debug, and -vvvv is what
+     * people type when they want everything.
+     */
+    #[Test]
+    public function it_accepts_more_vs_than_there_are_levels(): void
+    {
+        config(['horizon-job-output.verbosity' => 'vvvv']);
+
+        $this->runJob($this->chattyJob());
+
+        $this->assertStringContainsString('debugging', $this->store->latest());
+    }
+
+    #[Test]
+    public function a_job_can_raise_its_own_verbosity(): void
+    {
+        config(['horizon-job-output.verbosity' => 'normal']);
+
+        $this->runJob($this->chattyJob('vvv'));
+
+        $this->assertStringContainsString('debugging', $this->store->latest());
+    }
+
+    #[Test]
+    public function a_job_can_lower_its_own_verbosity(): void
+    {
+        config(['horizon-job-output.verbosity' => 'vvv']);
+
+        $this->runJob($this->chattyJob('normal'));
+
+        $this->assertStringNotContainsString('detail', $this->store->latest());
+    }
+
+    /**
+     * A misspelled level would otherwise present as output that is simply
+     * missing, with nothing tying it back to the setting.
+     */
+    #[Test]
+    public function it_warns_and_falls_back_to_normal_on_an_unknown_level(): void
+    {
+        Log::shouldReceive('warning')->once();
+
+        config(['horizon-job-output.verbosity' => 'loud']);
+
+        $this->runJob($this->chattyJob());
+
+        $this->assertStringContainsString('always', $this->store->latest());
+        $this->assertStringNotContainsString('detail', $this->store->latest());
+    }
+
+    #[Test]
+    public function the_quiet_level_records_nothing(): void
+    {
+        config(['horizon-job-output.verbosity' => 'quiet']);
+
+        $this->runJob($this->chattyJob());
+
+        $this->assertSame('', $this->store->latest());
+    }
+
+    /**
+     * The point of the setting: Symfony picks the progress bar format from the
+     * output's verbosity, so a higher level adds the elapsed time and estimate
+     * to a job's bar exactly as it does for a command.
+     */
+    #[Test]
+    public function a_progress_bar_reports_its_timings_at_a_higher_verbosity(): void
+    {
+        $job = fn () => new class(new FakeQueueJob) extends JobWithOutput
+        {
+            public function handle(): void
+            {
+                $this->withProgressBar([1, 2], fn () => null);
+            }
+        };
+
+        // At the normal level the bar ends at its percentage; a higher one
+        // appends the elapsed time and the estimate, each a figure and a unit.
+        $timings = '/100%\s+<?\s*[\d.]+\s*(ms|secs?|mins?|hrs?|days?)/';
+
+        $this->runJob($job());
+
+        $this->assertDoesNotMatchRegularExpression($timings, $this->store->latest());
+
+        config(['horizon-job-output.verbosity' => 'vv']);
+
+        $this->runJob($job());
+
+        $this->assertMatchesRegularExpression($timings, $this->store->latest());
     }
 }

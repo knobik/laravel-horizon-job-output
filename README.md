@@ -98,12 +98,51 @@ php artisan vendor:publish --tag=horizon-job-output-config
 | `flush_interval_ms` | `500` | How often a running job writes to Redis |
 | `poll_interval_ms` | `2000` | How often the dashboard polls while a job runs |
 | `ansi` | `true` | Store style tags as colour, rather than plain text |
+| `verbosity` | `normal` | `quiet`, `normal`, `v`, `vv` or `vvv` — see below |
 | `renderer` | `terminal` | `terminal` or `html` — see below |
 | `columns` | `80` | Terminal width; match what the job wrote at |
 
 Setting `enabled` to `false` stops output being recorded and removes the panel,
 but jobs using the trait keep working — their `$this->info()` calls simply go
 nowhere. Disabling the package never changes whether your jobs run.
+
+### Verbosity
+
+Jobs write at the same levels a command does, named after Artisan's flags. The
+level decides two things.
+
+The write helpers take an optional verbosity, and anything above the current
+level is discarded — so `$this->info('shard 3 of 20', 'vv')` says nothing at the
+default and appears once the level is raised:
+
+```php
+$this->info('Rebuilding search index');          // always
+$this->line('scanning shard 3', null, 'vv');     // only at vv or above
+```
+
+And a progress bar reports more, exactly as it does under `php artisan -vv`,
+because Symfony picks the bar's format from the output's verbosity:
+
+```
+normal    12/20 [████████████████░░░░░░░░]  60%
+v         12/20 [████████████████░░░░░░░░]  60% 4 secs
+vv        12/20 [████████████████░░░░░░░░]  60% 4 secs/7 secs
+vvv       12/20 [████████████████░░░░░░░░]  60% 4 secs/7 secs 24.0 MiB
+```
+
+A single job can override the setting, which is usually the better place for it
+— the long job whose progress is worth timing is rarely every job in the
+application:
+
+```php
+public function outputVerbosity(): ?string
+{
+    return 'vv';
+}
+```
+
+`quiet` suppresses everything, progress bars included, so a job at that level
+records nothing at all rather than "text but no bars".
 
 ### Renderers
 
