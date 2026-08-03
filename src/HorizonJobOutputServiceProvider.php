@@ -6,9 +6,12 @@ use Illuminate\Bus\Dispatcher as BusDispatcher;
 use Illuminate\Contracts\Bus\Dispatcher as BusDispatcherContract;
 use Illuminate\Contracts\Foundation\CachesRoutes;
 use Illuminate\Contracts\Redis\Factory as RedisFactory;
+use Illuminate\Queue\Events\JobProcessing;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 use Knobik\HorizonJobOutput\Pipes\CaptureJobOutput;
+use Knobik\HorizonJobOutput\Queue\CurrentJob;
 use Laravel\Horizon\Contracts\JobRepository;
 use Laravel\Sentinel\Http\Middleware\SentinelMiddleware;
 use ReflectionProperty;
@@ -24,6 +27,8 @@ class HorizonJobOutputServiceProvider extends ServiceProvider
             JobOutputStore::class,
             fn ($app) => new RedisJobOutputStore($app->make(RedisFactory::class))
         );
+
+        $this->app->singleton(CurrentJob::class);
 
         // Registered here rather than in boot(). Horizon's dashboard ends in a
         // catch-all route matching everything under its prefix, added from its
@@ -54,6 +59,8 @@ class HorizonJobOutputServiceProvider extends ServiceProvider
             if (! config('horizon-job-output.enabled', true)) {
                 return;
             }
+
+            $this->trackTheJobInHand();
 
             // Deferred rather than eager: a request that never touches Horizon
             // or renders a view should not pay to construct its job repository
@@ -115,6 +122,26 @@ class HorizonJobOutputServiceProvider extends ServiceProvider
         }
 
         return $middleware;
+    }
+
+    /**
+     * Keep track of the job the worker is processing.
+     *
+     * A queued Artisan command carries no job of its own — QueuedCommand does
+     * not use InteractsWithQueue, so nothing sets one — and the bus pipe sees
+     * the command alone. These events are the one place the queue job, and so
+     * the Horizon id its output belongs on, is in reach.
+     */
+    protected function trackTheJobInHand(): void
+    {
+        $current = $this->app->make(CurrentJob::class);
+
+        Queue::before(fn (JobProcessing $event) => $current->set($event->job));
+
+        // Cleared on the way out so that nothing dispatched between jobs is
+        // handed the id of the job that has just finished.
+        Queue::after(fn () => $current->forget());
+        Queue::exceptionOccurred(fn () => $current->forget());
     }
 
     /**

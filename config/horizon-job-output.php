@@ -102,6 +102,23 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Artisan Commands
+    |--------------------------------------------------------------------------
+    |
+    | Whether an Artisan command writes into the job that ran it. This covers
+    | commands queued with Artisan::queue(), whose output has nowhere else to
+    | go, and commands a job runs itself with Artisan::call().
+    |
+    | Worth turning off if your jobs call commands that say a great deal: their
+    | output shares the job's max_bytes budget, so a talkative command can crowd
+    | out what the job itself wrote.
+    |
+    */
+
+    'capture_artisan' => env('HORIZON_JOB_OUTPUT_CAPTURE_ARTISAN', true),
+
+    /*
+    |--------------------------------------------------------------------------
     | Renderer
     |--------------------------------------------------------------------------
     |

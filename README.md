@@ -33,6 +33,39 @@ The interactive prompts (`ask()`, `confirm()`, `choice()`, …) throw instead. A
 queue worker has no input stream, so they would otherwise block until the job
 timed out.
 
+## Queued Artisan commands
+
+A command queued with `Artisan::queue()` is a job like any other, and its output
+lands on the dashboard the same way — no trait, nothing to change in the command:
+
+```php
+Artisan::queue('search:reindex', ['--fresh' => true]);
+```
+
+The same goes for a command a job runs itself, so a job that leans on an
+existing command still shows everything that happened:
+
+```php
+public function handle(): void
+{
+    $this->info('Reindexing');
+
+    Artisan::call('search:reindex');   // the command's output lands here too
+}
+```
+
+`Artisan::output()` keeps returning what the command wrote, so a job that reads
+it back is unaffected, and a command handed a buffer of its own still writes
+only there.
+
+Set `capture_artisan` to `false` to leave commands out of it. Worth doing if
+your jobs call commands that say a great deal — a command's output shares the
+job's `max_bytes` budget, so a talkative one can crowd out what the job wrote.
+
+Scheduled commands are a different thing and are **not** covered: `$schedule
+->command()` runs `php artisan` as its own process rather than queueing a job,
+so Horizon never sees it. `$schedule->job()` queues normally and works.
+
 ## Reserved Jobs page
 
 The package also adds a **Reserved Jobs** page to the dashboard sidebar, listing
@@ -68,13 +101,16 @@ under a key of its own. That means it shares one key and one TTL with the job, s
 it is trimmed by Horizon's existing `horizon.trim.*` settings with no cleanup
 code, no scheduled command, and no way for the two to fall out of sync.
 
-Three integration points, none of which require changes to Horizon:
+Four integration points, none of which require changes to Horizon:
 
 - `RedisJobRepository::$keys` is a public whitelist read with `HMGET`. The
   provider appends `output` to it, so the field flows through the existing
   `/api/jobs/{id}` endpoints with no controller or route overrides.
 - A global bus pipe attaches the output instance while the job runs. Unserialized
   jobs never run their constructor, so this cannot be done at dispatch time.
+- The console kernel is decorated for the length of a job, so that an Artisan
+  command run during it writes into the job's output instead of being discarded.
+  The kernel is put back however the job ends.
 - The `horizon::layout` view is overridden to inject the panel. Rather than
   shipping a copy that drifts, the override renders Horizon's real layout and
   patches a few anchors in the result — which is also how the Reserved Jobs page
@@ -99,6 +135,7 @@ php artisan vendor:publish --tag=horizon-job-output-config
 | `poll_interval_ms` | `2000` | How often the dashboard polls while a job runs |
 | `ansi` | `true` | Store style tags as colour, rather than plain text |
 | `verbosity` | `normal` | `quiet`, `normal`, `v`, `vv` or `vvv` — see below |
+| `capture_artisan` | `true` | Record the output of Artisan commands a job runs, and of queued ones |
 | `renderer` | `terminal` | `terminal` or `html` — see below |
 | `columns` | `80` | Terminal width; match what the job wrote at |
 

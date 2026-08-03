@@ -3,43 +3,19 @@
 namespace Knobik\HorizonJobOutput\Tests\Feature;
 
 use Illuminate\Support\Facades\Log;
-use Knobik\HorizonJobOutput\JobOutputStore;
-use Knobik\HorizonJobOutput\Pipes\CaptureJobOutput;
+use Knobik\HorizonJobOutput\Tests\Concerns\RunsJobsThroughThePipe;
 use Knobik\HorizonJobOutput\Tests\Fixtures\FakeQueueJob;
 use Knobik\HorizonJobOutput\Tests\Fixtures\JobOptingOut;
 use Knobik\HorizonJobOutput\Tests\Fixtures\JobThatFails;
 use Knobik\HorizonJobOutput\Tests\Fixtures\JobWithOutput;
 use Knobik\HorizonJobOutput\Tests\Fixtures\JobWithoutTrait;
-use Knobik\HorizonJobOutput\Tests\Fixtures\RecordingStore;
 use Knobik\HorizonJobOutput\Tests\TestCase;
 use PHPUnit\Framework\Attributes\Test;
 use RuntimeException;
 
 class CaptureJobOutputTest extends TestCase
 {
-    protected RecordingStore $store;
-
-    protected function setUp(): void
-    {
-        parent::setUp();
-
-        $this->store = new RecordingStore;
-        $this->app->instance(JobOutputStore::class, $this->store);
-    }
-
-    protected function pipe(): CaptureJobOutput
-    {
-        return $this->app->make(CaptureJobOutput::class);
-    }
-
-    protected function runJob(object $job): mixed
-    {
-        return $this->pipe()->handle($job, function ($job) {
-            $job->handle();
-
-            return 'done';
-        });
-    }
+    use RunsJobsThroughThePipe;
 
     #[Test]
     public function it_captures_output_from_a_job_using_the_trait(): void

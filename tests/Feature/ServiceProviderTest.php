@@ -4,11 +4,17 @@ namespace Knobik\HorizonJobOutput\Tests\Feature;
 
 use Illuminate\Bus\Dispatcher as BusDispatcher;
 use Illuminate\Contracts\Bus\Dispatcher as BusDispatcherContract;
+use Illuminate\Contracts\Queue\Job;
+use Illuminate\Foundation\Console\QueuedCommand;
+use Illuminate\Queue\Events\JobProcessed;
+use Illuminate\Queue\Events\JobProcessing;
 use Knobik\HorizonJobOutput\HorizonJobOutputServiceProvider;
 use Knobik\HorizonJobOutput\JobOutputStore;
 use Knobik\HorizonJobOutput\Pipes\CaptureJobOutput;
+use Knobik\HorizonJobOutput\Queue\CurrentJob;
 use Knobik\HorizonJobOutput\Tests\TestCase;
 use Laravel\Horizon\Contracts\JobRepository;
+use Mockery;
 use PHPUnit\Framework\Attributes\Test;
 use ReflectionMethod;
 use ReflectionProperty;
@@ -110,6 +116,29 @@ class ServiceProviderTest extends TestCase
             $hints['horizon'][0],
             'The package view path must take precedence over Horizon\'s.'
         );
+    }
+
+    /**
+     * The worker's events are the only place a queued Artisan command's Horizon
+     * id can be found, so this wiring is what makes that capture work at all —
+     * everything downstream of it can pass with the listeners never registered.
+     */
+    #[Test]
+    public function it_tracks_the_job_the_worker_is_processing(): void
+    {
+        $job = Mockery::mock(Job::class);
+        $job->shouldReceive('payload')->andReturn(['data' => ['commandName' => QueuedCommand::class]]);
+        $job->shouldReceive('uuid')->andReturn('job-uuid');
+
+        $current = $this->app->make(CurrentJob::class);
+
+        event(new JobProcessing('redis', $job));
+
+        $this->assertSame('job-uuid', $current->uuidFor(QueuedCommand::class));
+
+        event(new JobProcessed('redis', $job));
+
+        $this->assertNull($current->uuidFor(QueuedCommand::class));
     }
 
     #[Test]
