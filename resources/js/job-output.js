@@ -67,6 +67,14 @@
             // Progress bars also report themselves to the terminal title bar
             // with OSC sequences, which carry nothing visible.
             .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, '')
+            // A cursor reset at the very end, with no erase after it, is just
+            // where a flush landed part way through a redraw: the cursor moved
+            // but nothing was cleared, so the line still shows the frame it
+            // drew last. Left in, it would end the line on an empty segment and
+            // blank out a running progress bar entirely. A reset that *is*
+            // followed by an erase falls through to the rule below, so a bar
+            // cleared on purpose still renders as gone.
+            .replace(/\x1b\[\d*G$/, '')
             // Symfony redraws a progress bar by moving the cursor back to
             // column one rather than by emitting a carriage return.
             .replace(/\x1b\[\d*G/g, '\r')

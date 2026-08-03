@@ -200,8 +200,10 @@ class LayoutDecorator
             'rootId' => self::ROOT_ID,
             'pageId' => self::PAGE_ID,
             'pagePath' => self::PAGE_PATH,
+            // horizon-job-output.ansi is deliberately absent: it decides whether
+            // the worker writes escape codes at all, which is settled long
+            // before the dashboard renders, and nothing on the page reads it.
             'pollInterval' => (int) $this->config->get('horizon-job-output.poll_interval_ms', 2000),
-            'ansi' => (bool) $this->config->get('horizon-job-output.ansi', true),
             'columns' => (int) $this->config->get('horizon-job-output.columns', 80),
         ];
 
