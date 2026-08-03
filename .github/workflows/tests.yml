@@ -86,7 +86,8 @@ jobs:
       - name: Check code style
         run: vendor/bin/pint --test
 
-      - name: Check panel script parses
-        # This file is inlined into Horizon's layout, so a syntax error here
-        # does not degrade the panel — it breaks the whole dashboard.
-        run: node --check resources/js/job-output.js
+      - name: Check panel scripts parse
+        # These files are inlined into Horizon's layout, so a syntax error in
+        # either does not degrade the panel — it breaks the whole dashboard.
+        run: |
+          for script in resources/js/*.js; do node --check "$script"; done

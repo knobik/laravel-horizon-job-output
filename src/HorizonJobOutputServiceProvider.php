@@ -4,7 +4,9 @@ namespace Knobik\HorizonJobOutput;
 
 use Illuminate\Bus\Dispatcher as BusDispatcher;
 use Illuminate\Contracts\Bus\Dispatcher as BusDispatcherContract;
+use Illuminate\Contracts\Foundation\CachesRoutes;
 use Illuminate\Contracts\Redis\Factory as RedisFactory;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 use Knobik\HorizonJobOutput\Pipes\CaptureJobOutput;
 use Laravel\Horizon\Contracts\JobRepository;
@@ -21,6 +23,14 @@ class HorizonJobOutputServiceProvider extends ServiceProvider
             JobOutputStore::class,
             fn ($app) => new RedisJobOutputStore($app->make(RedisFactory::class))
         );
+
+        // Registered here rather than in boot(). Horizon's dashboard ends in a
+        // catch-all route matching everything under its prefix, added from its
+        // own boot(), and whichever route is registered first wins. Every
+        // provider's register() runs before any provider's boot(), so this is
+        // the only placement that beats the catch-all no matter what order the
+        // packages were discovered in.
+        $this->registerRoutes();
     }
 
     public function boot(): void
@@ -50,6 +60,36 @@ class HorizonJobOutputServiceProvider extends ServiceProvider
             // immediately if something resolved them already.
             $this->callAfterResolving(JobRepository::class, fn ($repository) => $this->exposeOutputOnJobRepository($repository));
             $this->callAfterResolving('view', fn ($view) => $this->registerViewOverride($view));
+        });
+    }
+
+    /**
+     * Register the reserved jobs endpoint inside Horizon's route group.
+     *
+     * The group is rebuilt here rather than reused because Horizon has not
+     * booted yet — see the note at the call site. Only the middleware group name
+     * is referenced, and middleware groups resolve per request, so the group
+     * Horizon defines later is still the one that runs. horizon.path is read
+     * with a fallback for the same reason: a customised path always comes from a
+     * published config file, which is loaded before any provider runs, so the
+     * fallback only ever covers Horizon's own default.
+     */
+    protected function registerRoutes(): void
+    {
+        if ($this->app instanceof CachesRoutes && $this->app->routesAreCached()) {
+            return;
+        }
+
+        // The route is registered unconditionally and the reserved_page toggle
+        // is enforced in the controller instead. Gating it here would write the
+        // setting into a cached route table, so flipping it would need a
+        // route:clear to take effect.
+        Route::group([
+            'domain' => config('horizon.domain', null),
+            'prefix' => config('horizon.path', 'horizon'),
+            'middleware' => 'horizon',
+        ], function () {
+            $this->loadRoutesFrom(__DIR__.'/../routes/reserved-jobs.php');
         });
     }
 

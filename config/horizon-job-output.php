@@ -17,6 +17,19 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Reserved Jobs Page
+    |--------------------------------------------------------------------------
+    |
+    | Adds a "Reserved Jobs" page to the Horizon dashboard listing the jobs the
+    | workers currently hold, including any whose reservation has expired
+    | because the worker died. Disable to leave Horizon's navigation untouched.
+    |
+    */
+
+    'reserved_page' => env('HORIZON_JOB_OUTPUT_RESERVED_PAGE', true),
+
+    /*
+    |--------------------------------------------------------------------------
     | Maximum Output Size
     |--------------------------------------------------------------------------
     |

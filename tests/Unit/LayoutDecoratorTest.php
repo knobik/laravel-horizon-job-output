@@ -9,10 +9,16 @@ use PHPUnit\Framework\Attributes\Test;
 
 class LayoutDecoratorTest extends TestCase
 {
+    /**
+     * The parts of Horizon's layout the decorator patches: the sidebar nav and
+     * the router view, wrapped in the #horizon element Vue templates from.
+     */
     protected function layout(string $body = '<router-view></router-view>'): string
     {
-        return '<html><head></head><body><div id="horizon">'.$body.'</div></body></html>';
+        return '<html><head></head><body><div id="horizon">'.self::NAV.$body.'</div></body></html>';
     }
+
+    protected const NAV = '<ul class="nav flex-column"><li class="nav-item"><a href="/horizon/failed">Failed Jobs</a></li></ul>';
 
     protected function decorator(): LayoutDecorator
     {
@@ -94,7 +100,7 @@ class LayoutDecoratorTest extends TestCase
         Log::shouldReceive('warning')->once();
 
         $html = $this->decorator()->decorate(
-            '<html><head></head><body><div id="horizon">no anchor here</div></body></html>'
+            '<html><head></head><body><div id="horizon">'.self::NAV.'no anchor here</div></body></html>'
         );
 
         $this->assertStringNotContainsString(LayoutDecorator::ROOT_ID.'"></div>', $html);
@@ -106,7 +112,7 @@ class LayoutDecoratorTest extends TestCase
     {
         Log::shouldReceive('warning')->once();
 
-        $html = $this->decorator()->decorate('<div id="horizon"><router-view></router-view></div>');
+        $html = $this->decorator()->decorate('<div id="horizon">'.self::NAV.'<router-view></router-view></div>');
 
         $this->assertStringContainsString(LayoutDecorator::ROOT_ID, $html);
         $this->assertStringNotContainsString('window.HorizonJobOutput =', $html);
@@ -150,5 +156,90 @@ class LayoutDecoratorTest extends TestCase
         $withoutTerminal = strlen($this->decorator()->decorate($this->layout()));
 
         $this->assertGreaterThan(300_000, $withTerminal - $withoutTerminal);
+    }
+
+    /* ------------------------------------------------ reserved jobs page */
+
+    #[Test]
+    public function it_mounts_the_reserved_jobs_page_beside_the_output_panel(): void
+    {
+        $html = $this->decorator()->decorate($this->layout());
+
+        // Both land inside #horizon, where Vue treats them as static nodes of
+        // its in-DOM template and leaves them alone.
+        $this->assertMatchesRegularExpression(
+            '/<div id="'.LayoutDecorator::ROOT_ID.'"><\/div>\s*<div id="'.LayoutDecorator::PAGE_ID.'"><\/div>/',
+            $html
+        );
+    }
+
+    #[Test]
+    public function it_adds_a_sidebar_link_for_the_reserved_jobs_page(): void
+    {
+        $html = $this->decorator()->decorate($this->layout());
+
+        $this->assertStringContainsString('<span>Reserved Jobs</span>', $html);
+
+        // Appended to the nav rather than replacing anything in it.
+        $this->assertStringContainsString('Failed Jobs', $html);
+        $this->assertLessThan(
+            strpos($html, '<span>Reserved Jobs</span>'),
+            strpos($html, 'Failed Jobs'),
+        );
+    }
+
+    /**
+     * The nav sits inside Vue's in-DOM template, so a router-link would be
+     * compiled and resolve against a router that has never heard of this page.
+     */
+    #[Test]
+    public function the_sidebar_link_is_a_plain_anchor_rather_than_a_router_link(): void
+    {
+        $html = $this->decorator()->decorate($this->layout());
+
+        $this->assertStringContainsString('<a href="/horizon/reserved"', $html);
+        $this->assertStringNotContainsString('<router-link', $html);
+    }
+
+    #[Test]
+    public function the_sidebar_link_follows_a_customised_dashboard_path(): void
+    {
+        config(['horizon.path' => 'ops/queues']);
+
+        $this->assertStringContainsString(
+            '<a href="/ops/queues/reserved"',
+            $this->decorator()->decorate($this->layout())
+        );
+    }
+
+    #[Test]
+    public function it_leaves_the_navigation_alone_when_the_page_is_disabled(): void
+    {
+        config(['horizon-job-output.reserved_page' => false]);
+
+        $html = $this->decorator()->decorate($this->layout());
+
+        $this->assertStringNotContainsString('Reserved Jobs', $html);
+        $this->assertStringNotContainsString('<div id="'.LayoutDecorator::PAGE_ID.'"></div>', $html);
+
+        // The output panel is a separate feature and carries on regardless.
+        $this->assertStringContainsString('<div id="'.LayoutDecorator::ROOT_ID.'"></div>', $html);
+    }
+
+    #[Test]
+    public function it_keeps_the_dashboard_working_when_the_sidebar_markup_changes(): void
+    {
+        Log::shouldReceive('warning')->once();
+
+        $html = $this->decorator()->decorate(
+            '<html><head></head><body><div id="horizon"><router-view></router-view></div></body></html>'
+        );
+
+        $this->assertStringNotContainsString('<span>Reserved Jobs</span>', $html);
+
+        // Everything else still renders, including the page mount, so the page
+        // stays reachable by URL even with no link pointing at it.
+        $this->assertStringContainsString(LayoutDecorator::ROOT_ID, $html);
+        $this->assertStringContainsString('<div id="'.LayoutDecorator::PAGE_ID.'"></div>', $html);
     }
 }

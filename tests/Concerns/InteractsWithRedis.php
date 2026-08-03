@@ -10,6 +10,21 @@ use Throwable;
  */
 trait InteractsWithRedis
 {
+    /**
+     * Testbench calls these two by naming convention, so a test class only has to
+     * use the trait to get a skip guard and a clean database either side.
+     */
+    protected function setUpInteractsWithRedis(): void
+    {
+        $this->skipWithoutRedis();
+        $this->flushRedis();
+    }
+
+    protected function tearDownInteractsWithRedis(): void
+    {
+        $this->flushRedis();
+    }
+
     protected function redis()
     {
         return Redis::connection('horizon');

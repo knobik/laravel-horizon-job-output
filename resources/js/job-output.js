@@ -8,9 +8,11 @@
  * repository whitelist.
  */
 (function () {
-    const settings = window.HorizonJobOutput || {};
+    const support = window.HorizonJobOutputSupport;
+    const settings = support.settings;
+    const escapeHtml = support.escapeHtml;
     const ROOT_ID = settings.rootId || 'hjo-root';
-    const POLL_INTERVAL = settings.pollInterval || 2000;
+    const POLL_INTERVAL = support.pollInterval;
     const TERMINAL_STATUSES = ['completed', 'failed'];
 
     const COLUMNS = settings.columns || 80;
@@ -24,21 +26,12 @@
 
     /* ---------------------------------------------------------------- routing */
 
-    function basePath() {
-        return (window.Horizon && window.Horizon.basePath) || '';
-    }
-
     /**
-     * Pull the job id out of the current URL. Horizon uses history-mode routing,
-     * so both the job preview and failed job preview routes are real paths.
+     * Pull the job id out of the current URL. Both the job preview and failed job
+     * preview routes are real paths.
      */
     function currentJobId() {
-        const base = basePath();
-        let path = window.location.pathname;
-
-        if (base && path.indexOf(base) === 0) {
-            path = path.slice(base.length);
-        }
+        const path = support.dashboardPath();
 
         const preview = path.match(/^\/jobs\/[^/]+\/([^/]+)\/?$/);
         if (preview) {
@@ -51,15 +44,6 @@
         }
 
         return null;
-    }
-
-    /* ------------------------------------------------------------------- ansi */
-
-    function escapeHtml(text) {
-        return text
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;');
     }
 
     const FOREGROUND = {
@@ -344,15 +328,6 @@
 
     /* ------------------------------------------------------------------ polling */
 
-    function fetchJob(id) {
-        return fetch(basePath() + '/api/jobs/' + encodeURIComponent(id), {
-            headers: { Accept: 'application/json' },
-            credentials: 'same-origin',
-        })
-            .then((response) => (response.ok ? response.json() : null))
-            .catch(() => null);
-    }
-
     function tick() {
         const id = activeJobId;
 
@@ -360,7 +335,7 @@
             return;
         }
 
-        fetchJob(id).then((job) => {
+        support.getJson('/api/jobs/' + encodeURIComponent(id)).then((job) => {
             // The route may have changed while the request was in flight.
             if (!job || activeJobId !== id) {
                 return;
@@ -399,23 +374,6 @@
         timer = setInterval(tick, POLL_INTERVAL);
     }
 
-    /**
-     * The mount point is created by Vue when it renders the layout template, so
-     * on a cold load it may not exist yet.
-     */
-    function whenRootExists(callback, attempts) {
-        if (root()) {
-            callback();
-            return;
-        }
-
-        if ((attempts || 0) > 50) {
-            return;
-        }
-
-        setTimeout(() => whenRootExists(callback, (attempts || 0) + 1), 100);
-    }
-
     function sync() {
         const id = currentJobId();
 
@@ -430,29 +388,8 @@
             return;
         }
 
-        whenRootExists(() => start(id));
+        support.whenElementExists(ROOT_ID, () => start(id));
     }
 
-    /* ------------------------------------------------------------------- events */
-
-    // vue-router pushes state rather than reloading, so navigation is observed
-    // by wrapping the history methods it calls.
-    ['pushState', 'replaceState'].forEach((method) => {
-        const original = history[method];
-
-        history[method] = function () {
-            const result = original.apply(this, arguments);
-            window.dispatchEvent(new Event('hjo:navigated'));
-            return result;
-        };
-    });
-
-    window.addEventListener('hjo:navigated', sync);
-    window.addEventListener('popstate', sync);
-
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', sync);
-    } else {
-        sync();
-    }
+    support.onNavigation(sync);
 })();

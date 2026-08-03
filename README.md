@@ -33,6 +33,25 @@ The interactive prompts (`ask()`, `confirm()`, `choice()`, …) throw instead. A
 queue worker has no input stream, so they would otherwise block until the job
 timed out.
 
+## Reserved Jobs page
+
+The package also adds a **Reserved Jobs** page to the dashboard sidebar, listing
+the jobs the workers are holding right now — something Horizon has no view of.
+Reserved jobs are otherwise mixed into the pending list with nothing to set them
+apart.
+
+It reads the queue's own reserved set rather than Horizon's pending list, so its
+cost tracks the number of workers rather than the size of the backlog. That set
+also carries each reservation's deadline, so a job whose worker died is listed
+with a **Reservation expired** badge until Horizon releases it back onto the
+queue — the one case you would open this page to diagnose, and one nothing else
+surfaces.
+
+Rows link through to the job details page, and any job with live output is
+flagged so you know there is something to look at.
+
+Set `reserved_page` to `false` to leave Horizon's navigation untouched.
+
 ## Installation
 
 ```bash
@@ -58,7 +77,12 @@ Three integration points, none of which require changes to Horizon:
   jobs never run their constructor, so this cannot be done at dispatch time.
 - The `horizon::layout` view is overridden to inject the panel. Rather than
   shipping a copy that drifts, the override renders Horizon's real layout and
-  patches two anchors in the result.
+  patches a few anchors in the result — which is also how the Reserved Jobs page
+  adds its sidebar link, since Horizon's router is compiled into its bundle.
+
+Every one of those patches is optional. If Horizon changes the markup underneath
+them the package logs a warning and leaves that piece out; the dashboard still
+renders and jobs still run.
 
 ## Configuration
 
@@ -69,6 +93,7 @@ php artisan vendor:publish --tag=horizon-job-output-config
 | Option | Default | Purpose |
 | --- | --- | --- |
 | `enabled` | `true` | Turn capture and the dashboard panel off entirely |
+| `reserved_page` | `true` | Show the Reserved Jobs page and its sidebar link |
 | `max_bytes` | `65536` | Truncate a runaway job's output |
 | `flush_interval_ms` | `500` | How often a running job writes to Redis |
 | `poll_interval_ms` | `2000` | How often the dashboard polls while a job runs |

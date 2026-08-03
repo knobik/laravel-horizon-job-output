@@ -17,17 +17,7 @@ class JobOutputStoreTest extends TestCase
     {
         parent::setUp();
 
-        $this->skipWithoutRedis();
-        $this->flushRedis();
-
         $this->store = $this->app->make(JobOutputStore::class);
-    }
-
-    protected function tearDown(): void
-    {
-        $this->flushRedis();
-
-        parent::tearDown();
     }
 
     /**
