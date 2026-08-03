@@ -37,8 +37,15 @@
     max-height: 28rem;
     overflow: auto;
     color: #d7dae0;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-    font-size: 0.8125rem;
+    /*
+     * MONOSPACE: Horizon's own stack, size and leading, taken from the .vjs-tree
+     * payload block this panel sits directly beneath. Both renderers use it so
+     * the output reads as part of the page rather than bolted onto it, and the
+     * terminal repeats these values in job-output.js — xterm takes them as
+     * options rather than from CSS.
+     */
+    font-family: Monaco, Menlo, Consolas, "Bitstream Vera Sans Mono", monospace;
+    font-size: 0.875rem;
     line-height: 1.5;
     white-space: pre;
     tab-size: 4;

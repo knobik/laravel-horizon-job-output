@@ -265,8 +265,19 @@
                 cursorStyle: 'bar',
                 cursorInactiveStyle: 'none',
                 scrollback: 5000,
-                fontSize: 13,
-                fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                // Matched to the payload block this panel sits under, which
+                // Horizon renders at 14px over 21px. xterm defaults to a line
+                // height of 1, which reads as cramped beside it.
+                //
+                // The multiplier is not Horizon's 1.5, because xterm applies it
+                // to the measured glyph cell rather than the font size, and that
+                // cell already carries the font's own leading — 1.5 renders 24px
+                // rows. 1.32 puts them on Horizon's 21px, and is picked from the
+                // middle of the band that rounds there so a platform whose
+                // metrics differ slightly still lands in the same place.
+                fontSize: 14,
+                lineHeight: 1.32,
+                fontFamily: 'Monaco, Menlo, Consolas, "Bitstream Vera Sans Mono", monospace',
                 theme: terminalTheme(),
             });
 
