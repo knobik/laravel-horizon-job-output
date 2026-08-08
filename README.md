@@ -85,6 +85,40 @@ flagged so you know there is something to look at.
 
 Set `reserved_page` to `false` to leave Horizon's navigation untouched.
 
+### Releasing a reservation
+
+Each row has a **Release** button that puts the job straight back onto its queue.
+Nothing is discarded — this is the same move Laravel makes for a reservation that
+has run out, brought forward.
+
+It is worth having because Laravel only makes that move inside `RedisQueue::pop()`.
+A queue whose workers have all died is never popped, so its abandoned jobs stay
+reserved indefinitely: **Reservation expired** on this page, and nowhere at all in
+Horizon. Releasing one hands it to the next worker that comes back.
+
+The button is on every row, not only the expired ones, because a wedged worker
+can hold a reservation that keeps looking healthy. Releasing a reservation that
+has *not* expired is a different proposition, though, and the dialog says so
+before it does anything: Redis has no way to tell the worker to stop, so the job
+is queued a second time and **both copies run to completion**. Releasing one that
+has expired carries no such risk — nothing is running it.
+
+A release only takes effect if the job is still reserved at that moment. If the
+worker finished it in the second between the page rendering and the click, the
+dashboard reports that there was nothing to release rather than resurrecting a
+job that has already run.
+
+One thing to expect: the job goes back onto the queue **exactly** as it was
+reserved, attempt count and all, so the worker that picks it up counts one more
+attempt as it always does. A job already on its last try therefore comes back
+only to be marked failed. That is not something this button does differently —
+it is what happens to any reservation Laravel recovers — but the click is what
+triggers it, so the dialog says so too. Give a job `$tries` room if you expect to
+release it.
+
+Set `release_reservations` to `false` to remove the button and the endpoint
+behind it, keeping the page itself.
+
 ## Installation
 
 ```bash
@@ -130,6 +164,7 @@ php artisan vendor:publish --tag=horizon-job-output-config
 | --- | --- | --- |
 | `enabled` | `true` | Turn capture and the dashboard panel off entirely |
 | `reserved_page` | `true` | Show the Reserved Jobs page and its sidebar link |
+| `release_reservations` | `true` | Allow a reserved job to be put back onto its queue from that page |
 | `max_bytes` | `65536` | Truncate a runaway job's output |
 | `flush_interval_ms` | `500` | How often a running job writes to Redis |
 | `poll_interval_ms` | `2000` | How often the dashboard polls while a job runs |

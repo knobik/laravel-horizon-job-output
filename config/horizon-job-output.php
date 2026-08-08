@@ -30,6 +30,28 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Releasing Reservations
+    |--------------------------------------------------------------------------
+    |
+    | Adds a "Release" button to each row of the Reserved Jobs page, which puts
+    | that job straight back onto its queue. It is what Laravel does by itself
+    | once a reservation runs out, and it exists here for the case that never
+    | reaches: the migration only runs while a worker is polling the queue, so a
+    | queue that has lost all of its workers keeps its jobs reserved forever.
+    |
+    | Nothing is discarded — the job is queued again, not deleted. But a
+    | reservation that has not expired is one a worker may still be working
+    | through, and releasing that puts a second copy onto the queue for both to
+    | run. The job also keeps its attempt count, so one already on its last try
+    | comes back only to be failed. The dashboard says both before it acts; set
+    | this to false to take the option away entirely.
+    |
+    */
+
+    'release_reservations' => env('HORIZON_JOB_OUTPUT_RELEASE_RESERVATIONS', true),
+
+    /*
+    |--------------------------------------------------------------------------
     | Maximum Output Size
     |--------------------------------------------------------------------------
     |

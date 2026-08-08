@@ -29,9 +29,43 @@ use Throwable;
  * abandoned one. Scanning `pending_jobs` for `status = reserved` would be O(the
  * whole backlog), and its scores are negative timestamps, so the reserved jobs
  * sort to the very tail — behind every long-delayed job, which never leaves.
+ *
+ * It also owns the page's one write, release(), which puts a reservation back
+ * onto its queue. That lives here rather than in a service of its own because
+ * it needs three things this class already has and nothing else does: the
+ * version-detected key building, the queue list to validate against, and the
+ * connection resolution.
  */
 class ReservedJobs
 {
+    /**
+     * Move one job out of the reserved set and back onto its queue.
+     *
+     * KEYS[1] the reserved set, KEYS[2] the queue, KEYS[3] the notify list.
+     * ARGV[1] the exact reserved payload.
+     *
+     * The zrem result is what makes this safe to fire from a page that is up to
+     * one poll interval out of date. In that window the worker may have finished
+     * the job and deleted its reservation, or another worker's pop() may have
+     * migrated it already; pushing unconditionally would put a job that has
+     * already run back onto the queue.
+     *
+     * The rest mirrors LuaScripts::migrateExpiredJobs, notify list included.
+     * That list is what wakes a worker blocked in blpop when block_for is set,
+     * and the matching lpop in LuaScripts::pop only runs when a job was really
+     * popped, so pushing one entry per job keeps the two balanced.
+     */
+    protected const RELEASE_SCRIPT = <<<'LUA'
+    if redis.call('zrem', KEYS[1], ARGV[1]) == 0 then
+        return 0
+    end
+
+    redis.call('rpush', KEYS[2], ARGV[1])
+    redis.call('rpush', KEYS[3], 1)
+
+    return 1
+    LUA;
+
     public function __construct(
         protected Application $app,
         protected QueueFactory $queue,
@@ -60,6 +94,96 @@ class ReservedJobs
     }
 
     /**
+     * Put one reserved job back onto its queue.
+     *
+     * This is exactly what Laravel does with a reservation that has run out —
+     * see LuaScripts::migrateExpiredJobs — brought forward to now. That
+     * migration only ever runs inside RedisQueue::pop(), so a queue whose
+     * workers have all died never reaches it: the job stays reserved, and the
+     * page lists it as expired, until a worker comes back to that queue. This is
+     * the way out of that.
+     *
+     * Returns true only when this call was the one that moved the job.
+     */
+    public function release(string $connection, string $queue, string $id): bool
+    {
+        // The Redis keys are built out of these two values, so they are checked
+        // against the same configured-plus-running list the page is drawn from.
+        // The endpoint can then only act on a queue it would have listed.
+        if (! $this->lists($connection, $queue)) {
+            return false;
+        }
+
+        $redisQueue = $this->redisQueue($connection);
+
+        if ($redisQueue === null) {
+            return false;
+        }
+
+        $key = $this->queueKey($redisQueue, $queue);
+        $reserved = $this->reservedKey($redisQueue, $queue);
+
+        try {
+            $redis = $redisQueue->getConnection();
+
+            $payload = $this->findReserved($redis, $reserved, $id);
+
+            if ($payload === null) {
+                return false;
+            }
+
+            return (int) $redis->eval(
+                self::RELEASE_SCRIPT, 3, $reserved, $key, $key.':notify', $payload
+            ) === 1;
+        } catch (Throwable $e) {
+            Log::warning(
+                "[horizon-job-output] Could not release the reservation on job '{$id}' on the ".
+                "'{$connection}' queue connection: ".$e->getMessage()
+            );
+
+            return false;
+        }
+    }
+
+    /**
+     * Find the exact reserved payload a job id belongs to.
+     *
+     * The reserved set is keyed by the payload, not the id, so the member has to
+     * be matched by hand — and it is the member itself that the release script
+     * needs, since anything reassembled from the decoded job would be a
+     * different string and would not remove. The scan is bounded by the worker
+     * count, which is the same cost as one poll of the page.
+     */
+    protected function findReserved(Connection $redis, string $reservedKey, string $id): ?string
+    {
+        foreach ((array) $redis->zrange($reservedKey, 0, -1) as $payload) {
+            $decoded = json_decode((string) $payload, true);
+
+            if (is_array($decoded) && $this->idOf($decoded) === $id) {
+                return (string) $payload;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Whether a connection and queue are among the ones this page reports on.
+     *
+     * The configured list is asked first because it is a plain config read,
+     * while the running one goes to Redis for the supervisors. Ordered the other
+     * way round, every release would pay for that lookup to confirm a queue the
+     * config already named.
+     */
+    protected function lists(string $connection, string $queue): bool
+    {
+        $matches = fn (array $pair) => $pair['connection'] === $connection && $pair['queue'] === $queue;
+
+        return $this->configuredQueues()->contains($matches)
+            || $this->runningQueues()->contains($matches);
+    }
+
+    /**
      * Read the reserved sets of every queue on one connection.
      *
      * Laravel 13.4 added RedisQueue::reservedJobs(), which reads these same sets
@@ -70,9 +194,9 @@ class ReservedJobs
      */
     protected function reservedOn(string $connection, array $queues, float $now): Collection
     {
-        $redisQueue = $this->queue->connection($connection);
+        $redisQueue = $this->redisQueue($connection);
 
-        if (! $redisQueue instanceof RedisQueue) {
+        if ($redisQueue === null) {
             return collect();
         }
 
@@ -105,7 +229,22 @@ class ReservedJobs
     }
 
     /**
-     * Build the key of one queue's reserved set.
+     * Resolve a queue connection, if it is one there is anything to read on.
+     *
+     * A reserved set is a Redis queue's own structure, so a Horizon supervisor
+     * pointed at any other driver has nothing here either to list or to release.
+     * One definition of that, shared by both, rather than the listing and the
+     * release each deciding what they can work with.
+     */
+    protected function redisQueue(string $connection): ?RedisQueue
+    {
+        $queue = $this->queue->connection($connection);
+
+        return $queue instanceof RedisQueue ? $queue : null;
+    }
+
+    /**
+     * Build the Redis key one queue's lists and sets hang off.
      *
      * Laravel 13 moved the key building behind a protected getQueueRedisKey()
      * that wraps the queue in a hash tag on cluster connections; on Laravel 12,
@@ -113,14 +252,23 @@ class ReservedJobs
      * it. Chosen by feature detection rather than by catching the failure —
      * reaching for a method that is not there would otherwise surface as a queue
      * with no reserved jobs, which is indistinguishable from a quiet queue.
+     *
+     * Every key release() touches is derived from this one string, which is what
+     * keeps its three keys inside a single hash slot on a cluster.
+     */
+    protected function queueKey(RedisQueue $queue, string $name): string
+    {
+        return method_exists($queue, 'getQueueRedisKey')
+            ? (new ReflectionMethod($queue, 'getQueueRedisKey'))->invoke($queue, $name)
+            : $queue->getQueue($name);
+    }
+
+    /**
+     * Build the key of one queue's reserved set.
      */
     protected function reservedKey(RedisQueue $queue, string $name): string
     {
-        $key = method_exists($queue, 'getQueueRedisKey')
-            ? (new ReflectionMethod($queue, 'getQueueRedisKey'))->invoke($queue, $name)
-            : $queue->getQueue($name);
-
-        return $key.':reserved';
+        return $this->queueKey($queue, $name).':reserved';
     }
 
     /**
@@ -134,10 +282,9 @@ class ReservedJobs
             return null;
         }
 
-        // Horizon keys its job hashes on the same id, preferring the uuid.
-        $id = $decoded['uuid'] ?? $decoded['id'] ?? null;
+        $id = $this->idOf($decoded);
 
-        if (! is_string($id) || $id === '') {
+        if ($id === null) {
             return null;
         }
 
@@ -156,6 +303,21 @@ class ReservedJobs
             'expired' => $expiresAt < $now,
             'has_output' => false,
         ];
+    }
+
+    /**
+     * The id a decoded payload is keyed on.
+     *
+     * Horizon keys its job hashes on the same id, preferring the uuid. This is
+     * the one rule the listing and the release have to agree on — the id put on
+     * a row is the id matched against the reserved set when that row's button is
+     * clicked — so both go through here rather than restating it.
+     */
+    protected function idOf(array $decoded): ?string
+    {
+        $id = $decoded['uuid'] ?? $decoded['id'] ?? null;
+
+        return is_string($id) && $id !== '' ? $id : null;
     }
 
     /**

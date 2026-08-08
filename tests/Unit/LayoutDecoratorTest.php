@@ -219,11 +219,41 @@ class LayoutDecoratorTest extends TestCase
 
         $html = $this->decorator()->decorate($this->layout());
 
-        $this->assertStringNotContainsString('Reserved Jobs', $html);
+        $this->assertStringNotContainsString('<span>Reserved Jobs</span>', $html);
+        $this->assertStringNotContainsString('data-hjo-nav', $html);
         $this->assertStringNotContainsString('<div id="'.LayoutDecorator::PAGE_ID.'"></div>', $html);
+
+        // The script that renders the page goes too, matched on a string only it
+        // carries. The stylesheet is inlined either way — it is one file for both
+        // features, and rules for a page that is not there cost nothing.
+        $this->assertStringNotContainsString('No jobs are being worked on right now.', $html);
 
         // The output panel is a separate feature and carries on regardless.
         $this->assertStringContainsString('<div id="'.LayoutDecorator::ROOT_ID.'"></div>', $html);
+    }
+
+    /**
+     * The endpoint enforces this too, but the page has no business offering a
+     * button the server is only going to refuse.
+     */
+    #[Test]
+    public function it_tells_the_page_whether_reservations_may_be_released(): void
+    {
+        $settings = $this->settings($this->decorator()->decorate($this->layout()));
+
+        $this->assertTrue($settings['canRelease']);
+
+        config(['horizon-job-output.release_reservations' => false]);
+
+        $settings = $this->settings($this->decorator()->decorate($this->layout()));
+
+        $this->assertFalse($settings['canRelease']);
+
+        // Only the button goes; the listing it belongs to is untouched.
+        $this->assertStringContainsString(
+            '<div id="'.LayoutDecorator::PAGE_ID.'"></div>',
+            $this->decorator()->decorate($this->layout())
+        );
     }
 
     #[Test]

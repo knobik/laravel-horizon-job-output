@@ -29,6 +29,32 @@
 }
 
 /*
+ * The release confirmation on the Reserved Jobs page.
+ *
+ * Unlike everything else here this is not scoped under #hjo-root, because the
+ * dialog is appended to the body: the page mount it would otherwise live in is
+ * rewritten on every poll, which would take the dialog with it. Horizon ships
+ * Bootstrap's CSS but not its JS, so the card inside is Horizon's own and only
+ * the backdrop and the centring are this package's.
+ */
+.hjo-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 1055;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    background-color: rgba(0, 0, 0, 0.5);
+}
+
+.hjo-modal .hjo-modal-dialog {
+    width: 100%;
+    max-width: 32rem;
+    box-shadow: 0 1rem 3rem rgba(0, 0, 0, 0.35);
+}
+
+/*
  * Everything below styles the fallback renderer, used when the terminal build
  * is unavailable or the html renderer is configured.
  */

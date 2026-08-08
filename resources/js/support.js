@@ -46,6 +46,40 @@ window.HorizonJobOutputSupport = (function () {
     }
 
     /**
+     * Send a JSON body to the dashboard.
+     *
+     * Horizon runs its routes through the `web` middleware group, so a POST
+     * without a CSRF token is rejected outright. Horizon's own layout carries
+     * the token in a meta tag for the same reason, and this reads that one
+     * rather than adding a second.
+     *
+     * Unlike getJson this reports how it went. A caller acting on the response
+     * has to tell "the server said no" apart from "the request never landed",
+     * which a bare null cannot express.
+     */
+    function postJson(path, body) {
+        const token = document.querySelector('meta[name="csrf-token"]');
+
+        return fetch(basePath() + path, {
+            method: 'POST',
+            headers: {
+                Accept: 'application/json',
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': token ? token.getAttribute('content') : '',
+            },
+            credentials: 'same-origin',
+            body: JSON.stringify(body),
+        })
+            .then((response) =>
+                response
+                    .json()
+                    .catch(() => null)
+                    .then((data) => ({ ok: response.ok, status: response.status, data }))
+            )
+            .catch(() => ({ ok: false, status: 0, data: null }));
+    }
+
+    /**
      * Mount points are created by Vue when it renders the layout template, so on
      * a cold load they may not exist yet.
      */
@@ -97,6 +131,7 @@ window.HorizonJobOutputSupport = (function () {
         dashboardPath,
         escapeHtml,
         getJson,
+        postJson,
         whenElementExists,
         onNavigation,
     };

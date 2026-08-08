@@ -200,6 +200,12 @@ class LayoutDecorator
             'rootId' => self::ROOT_ID,
             'pageId' => self::PAGE_ID,
             'pagePath' => self::PAGE_PATH,
+            // Whether to draw the release button at all. The endpoint enforces
+            // this too; sending it here keeps the page from offering an action
+            // the server is only going to refuse. Not also gated on the page
+            // being enabled — the only script that reads it is inlined below
+            // under exactly that condition.
+            'canRelease' => (bool) $this->config->get('horizon-job-output.release_reservations', true),
             // horizon-job-output.ansi is deliberately absent: it decides whether
             // the worker writes escape codes at all, which is settled long
             // before the dashboard renders, and nothing on the page reads it.
